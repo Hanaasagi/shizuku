@@ -300,6 +300,7 @@ fn link_object_to_executable() {
         .arg(object_filename)
         .arg("-o")
         .arg(output_filename)
+        .arg("-no-pie")
         .status()
         .expect("Failed to execute gcc");
 
