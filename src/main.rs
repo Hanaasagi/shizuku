@@ -1,4 +1,3 @@
-use llvm_sys::analysis::LLVMVerifierFailureAction::LLVMAbortProcessAction;
 use llvm_sys::analysis::*;
 use llvm_sys::core::*;
 use llvm_sys::execution_engine::*;
@@ -7,9 +6,56 @@ use llvm_sys::target::*;
 use llvm_sys::target_machine::LLVMCodeGenFileType::*;
 use llvm_sys::target_machine::*;
 use std::ffi::CString;
+use std::fmt::Display;
 use std::ptr;
 
+macro_rules! s_cstr {
+    ($s:expr) => {{
+        const BUFFER_SIZE: usize = 256;
+        let mut buffer = [0u8; BUFFER_SIZE];
+
+        if $s.len() >= BUFFER_SIZE {
+            panic!("String is too long, maximum length is {}", BUFFER_SIZE - 1);
+        }
+
+        buffer[..$s.len()].copy_from_slice($s.as_bytes());
+        buffer[$s.len()] = 0;
+
+        buffer.as_ptr() as *const i8
+    }};
+}
+
+struct LLVMVersion {
+    major: u32,
+    minor: u32,
+    patch: u32,
+}
+
+impl LLVMVersion {
+    fn get_llvm_version() -> Self {
+        let mut major: u32 = 0;
+        let mut minor: u32 = 0;
+        let mut patch: u32 = 0;
+
+        unsafe { LLVMGetVersion(&mut major, &mut minor, &mut patch) };
+
+        Self {
+            major,
+            minor,
+            patch,
+        }
+    }
+}
+
+impl Display for LLVMVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
 fn main() {
+    println!("LLVM version: {}", LLVMVersion::get_llvm_version());
+
     unsafe {
         // Initialize LLVM components
         assert_eq!(
@@ -30,22 +76,27 @@ fn main() {
 
         // Create a new LLVM context and module
         let context = LLVMContextCreate();
-        let module = LLVMModuleCreateWithNameInContext(c_str("hello_module").as_ptr(), context);
+        let module = LLVMModuleCreateWithNameInContext(c"shizuku_module".as_ptr(), context);
 
         // Create the function signature for main
         let main_func_type =
             LLVMFunctionType(LLVMVoidTypeInContext(context), ptr::null_mut(), 0, 0);
-        let main_func = LLVMAddFunction(module, c_str("main").as_ptr(), main_func_type);
+        let main_func = LLVMAddFunction(module, c"main".as_ptr(), main_func_type);
 
         // Create a basic block and builder
-        let entry = LLVMAppendBasicBlockInContext(context, main_func, c_str("entry").as_ptr());
+        let entry = LLVMAppendBasicBlockInContext(context, main_func, c"entry".as_ptr());
         let builder = LLVMCreateBuilderInContext(context);
         LLVMPositionBuilderAtEnd(builder, entry);
 
         // Create the format string for printf
-        let hello_str = c_str("Please enter x and y: ");
-        let hello_global =
-            LLVMBuildGlobalStringPtr(builder, hello_str.as_ptr(), c_str("hello_str").as_ptr());
+        let prompt_str = c"Please enter x and y: ";
+        let prompt_global =
+            LLVMBuildGlobalStringPtr(builder, prompt_str.as_ptr(), c"prompt_str".as_ptr());
+
+        // Create format string for scanf to read two integers
+        let scanf_str = c"%d %d";
+        let scanf_global =
+            LLVMBuildGlobalStringPtr(builder, scanf_str.as_ptr(), c"scanf_str".as_ptr());
 
         // Create printf function signature
         let printf_func_type = LLVMFunctionType(
@@ -54,17 +105,7 @@ fn main() {
             1,
             1,
         );
-        let printf_func = LLVMAddFunction(module, c_str("printf").as_ptr(), printf_func_type);
-
-        // Call printf with the format string
-        LLVMBuildCall2(
-            builder,
-            printf_func_type,
-            printf_func,
-            [hello_global].as_mut_ptr(),
-            1,
-            c_str("").as_ptr(),
-        );
+        let printf_func = LLVMAddFunction(module, c"printf".as_ptr(), printf_func_type);
 
         let scanf_func_type = LLVMFunctionType(
             LLVMInt32TypeInContext(context),
@@ -77,23 +118,33 @@ fn main() {
             3, // Adjusted to 3 for three parameters
             1,
         );
-        let scanf_func = LLVMAddFunction(module, c_str("scanf").as_ptr(), scanf_func_type);
-
-        // Create format string for scanf to read two integers
-        let scanf_str = c_str("%d %d");
-        let scanf_global =
-            LLVMBuildGlobalStringPtr(builder, scanf_str.as_ptr(), c_str("scanf_str").as_ptr());
+        let scanf_func = LLVMAddFunction(module, c"scanf".as_ptr(), scanf_func_type);
 
         // Allocate memory for x and y
-        let x = LLVMBuildAlloca(
+        let x = LLVMBuildAlloca(builder, LLVMInt32TypeInContext(context), c"x".as_ptr());
+        let y = LLVMBuildAlloca(builder, LLVMInt32TypeInContext(context), c"y".as_ptr());
+
+        let loop_cond_block =
+            LLVMAppendBasicBlockInContext(context, main_func, c"loop_cond".as_ptr());
+        let loop_body_block =
+            LLVMAppendBasicBlockInContext(context, main_func, c"loop_body".as_ptr());
+        let loop_exit_block =
+            LLVMAppendBasicBlockInContext(context, main_func, c"loop_exit".as_ptr());
+
+        // Jump to loop condition block from entry
+        LLVMBuildBr(builder, loop_cond_block);
+
+        // Set up the loop condition block
+        LLVMPositionBuilderAtEnd(builder, loop_cond_block);
+
+        // Call printf with the format string
+        LLVMBuildCall2(
             builder,
-            LLVMInt32TypeInContext(context),
-            c_str("x").as_ptr(),
-        );
-        let y = LLVMBuildAlloca(
-            builder,
-            LLVMInt32TypeInContext(context),
-            c_str("y").as_ptr(),
+            printf_func_type,
+            printf_func,
+            [prompt_global].as_mut_ptr(),
+            1,
+            c"".as_ptr(),
         );
 
         // Call scanf to read x and y from the user
@@ -103,38 +154,40 @@ fn main() {
             scanf_func,
             [scanf_global, x, y].as_mut_ptr(),
             3,
-            c_str("").as_ptr(),
+            c"".as_ptr(),
         );
-        // LLVMBuildCall2(
-        //     builder,
-        //     scanf_func_type,
-        //     scanf_func,
-        //     [scanf_global, y].as_mut_ptr(),
-        //     2,
-        //     c_str("").as_ptr(),
-        // );
 
-        // Load values from x and y using LLVMBuildLoad2
         let x_loaded = LLVMBuildLoad2(
             builder,
             LLVMInt32TypeInContext(context),
             x,
-            c_str("x_val").as_ptr(),
+            c"x_val".as_ptr(),
         );
         let y_loaded = LLVMBuildLoad2(
             builder,
             LLVMInt32TypeInContext(context),
             y,
-            c_str("y_val").as_ptr(),
+            c"y_val".as_ptr(),
         );
 
         // Add x and y
-        let sum = LLVMBuildAdd(builder, x_loaded, y_loaded, c_str("sum").as_ptr());
+        let sum = LLVMBuildAdd(builder, x_loaded, y_loaded, c"sum".as_ptr());
+
+        let condition = LLVMBuildICmp(
+            builder,
+            llvm_sys::LLVMIntPredicate::LLVMIntEQ,
+            sum,
+            LLVMConstInt(LLVMInt32TypeInContext(context), 15, 0),
+            c"is_equal".as_ptr(),
+        );
+        LLVMBuildCondBr(builder, condition, loop_exit_block, loop_body_block);
+
+        // Set up the loop body block
+        LLVMPositionBuilderAtEnd(builder, loop_body_block);
 
         // Create the format string for the sum
-        let sum_str = c_str("x + y = %d\n");
-        let sum_global =
-            LLVMBuildGlobalStringPtr(builder, sum_str.as_ptr(), c_str("sum_str").as_ptr());
+        let sum_str = c"sum is %d\n";
+        let sum_global = LLVMBuildGlobalStringPtr(builder, sum_str.as_ptr(), c"sum_str".as_ptr());
 
         // Call printf with the sum result
         LLVMBuildCall2(
@@ -143,28 +196,49 @@ fn main() {
             printf_func,
             [sum_global, sum].as_mut_ptr(),
             2,
-            c_str("").as_ptr(),
+            c"".as_ptr(),
+        );
+
+        // Jump back to the condition check
+        LLVMBuildBr(builder, loop_cond_block);
+
+        // Set up the loop exit block
+        LLVMPositionBuilderAtEnd(builder, loop_exit_block);
+
+        // Print success message
+        let success_str = c"Success: x + y = 15\n";
+        let success_global =
+            LLVMBuildGlobalStringPtr(builder, success_str.as_ptr(), c"success_str".as_ptr());
+        LLVMBuildCall2(
+            builder,
+            printf_func_type,
+            printf_func,
+            [success_global].as_mut_ptr(),
+            1,
+            c"".as_ptr(),
         );
 
         // Return void
         LLVMBuildRetVoid(builder);
 
         // Verify the module
-        if LLVMVerifyModule(module, LLVMAbortProcessAction, ptr::null_mut()) != 0 {
-            panic!("Module verification failed");
-        }
+        LLVMVerifyModule(
+            module,
+            LLVMVerifierFailureAction::LLVMAbortProcessAction,
+            ptr::null_mut(),
+        );
 
         // Save the module to a .ll file
-        save_module_to_ll(module, "output.ll");
+        save_module_to_ll(module, "a.ll");
 
         // Generate assembly from the module
-        generate_assembly(module, "output.s");
+        generate_assembly(module, "a.s");
 
         // Generate the target object file
-        generate_target(module, "output.o");
+        generate_target(module, "a.o");
 
         // Link the object file to generate the executable
-        link_object_to_executable();
+        link_object_to_executable("a.o", "a.out");
 
         // JIT compile and execute
         let mut engine: LLVMExecutionEngineRef = ptr::null_mut();
@@ -173,7 +247,7 @@ fn main() {
             panic!("Failed to create JIT compiler: {}", c_str_from_ptr(error));
         }
 
-        let main_func = LLVMGetNamedFunction(module, c_str("main").as_ptr());
+        let main_func = LLVMGetNamedFunction(module, c"main".as_ptr());
         LLVMRunFunction(engine, main_func, 0, ptr::null_mut());
 
         // Clean up
@@ -184,10 +258,9 @@ fn main() {
 }
 
 // Save the LLVM module to a `.ll` file.
-unsafe fn save_module_to_ll(module: LLVMModuleRef, filename: &str) {
+fn save_module_to_ll(module: LLVMModuleRef, filename: &str) {
     unsafe {
-        let c_filename = c_str(filename);
-        if LLVMPrintModuleToFile(module, c_filename.as_ptr(), ptr::null_mut()) != 0 {
+        if LLVMPrintModuleToFile(module, s_cstr!(filename), ptr::null_mut()) != 0 {
             panic!("Failed to write the module to a .ll file");
         } else {
             println!("Module saved to {}", filename);
@@ -196,9 +269,9 @@ unsafe fn save_module_to_ll(module: LLVMModuleRef, filename: &str) {
 }
 
 // Generate the assembly file from the module.
-unsafe fn generate_assembly(module: LLVMModuleRef, filename: &str) {
+fn generate_assembly(module: LLVMModuleRef, filename: &str) {
     unsafe {
-        let c_filename = c_str(filename);
+        let c_filename = s_cstr!(filename);
         let target_triple = LLVMGetDefaultTargetTriple();
         let mut target = std::ptr::null_mut();
         let mut error = std::ptr::null_mut();
@@ -213,8 +286,8 @@ unsafe fn generate_assembly(module: LLVMModuleRef, filename: &str) {
         let target_machine = LLVMCreateTargetMachine(
             target,
             target_triple,
-            c_str("generic").as_ptr(),
-            c_str("").as_ptr(),
+            c"generic".as_ptr(),
+            c"".as_ptr(),
             LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
             LLVMRelocMode::LLVMRelocDefault,
             LLVMCodeModel::LLVMCodeModelDefault,
@@ -223,7 +296,7 @@ unsafe fn generate_assembly(module: LLVMModuleRef, filename: &str) {
         if LLVMTargetMachineEmitToFile(
             target_machine,
             module,
-            c_filename.as_ptr(),
+            c_filename,
             LLVMAssemblyFile,
             ptr::null_mut(),
         ) != 0
@@ -237,16 +310,31 @@ unsafe fn generate_assembly(module: LLVMModuleRef, filename: &str) {
     }
 }
 
-fn c_str(s: &str) -> CString {
-    CString::new(s).unwrap()
-}
+// #[inline]
+// fn c_str(s: &str) -> *const i8{
+//     // return CString::new(s).unwrap();
+//     let mut buffer = [0u8; 256];
+
+//     if s.len() >= buffer.len() {
+//         panic!(
+//             "Filename is too long, maximum length is {}",
+//             buffer.len() - 1
+//         );
+//     }
+
+//     buffer[..s.len()].copy_from_slice(s.as_bytes());
+//     buffer[s.len()] = 0; // Null terminator
+
+//     let c_s = buffer.as_ptr() as *const i8;
+//     return c_s
+// }
 
 fn c_str_from_ptr(ptr: *mut i8) -> String {
     unsafe { CString::from_raw(ptr).to_string_lossy().into_owned() }
 }
 
 // Modify the generate_assembly function to generate a target object file
-unsafe fn generate_target(module: LLVMModuleRef, filename: &str) {
+fn generate_target(module: LLVMModuleRef, filename: &str) {
     unsafe {
         let target_triple = LLVMGetDefaultTargetTriple();
         let mut target = std::ptr::null_mut();
@@ -262,8 +350,8 @@ unsafe fn generate_target(module: LLVMModuleRef, filename: &str) {
         let target_machine = LLVMCreateTargetMachine(
             target,
             target_triple,
-            b"generic\0".as_ptr() as *const _,
-            b"\0".as_ptr() as *const _,
+            c"generic".as_ptr(),
+            c"".as_ptr(),
             LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
             LLVMRelocMode::LLVMRelocDefault,
             LLVMCodeModel::LLVMCodeModelDefault,
@@ -292,9 +380,7 @@ unsafe fn generate_target(module: LLVMModuleRef, filename: &str) {
 }
 
 // Link the object file to generate an executable ELF file
-fn link_object_to_executable() {
-    let output_filename = "output.out";
-    let object_filename = "output.o";
+fn link_object_to_executable(object_filename: &str, output_filename: &str) {
 
     let status = std::process::Command::new("gcc")
         .arg(object_filename)
