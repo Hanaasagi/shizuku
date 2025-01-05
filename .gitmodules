@@ -1,0 +1,8 @@
+[submodule "assets/syntaxes/LLVM"]
+	path = assets/syntaxes/LLVM
+	url = https://github.com/ioncodes/LLVM.tmBundle
+	branch = master
+[submodule "assets/themes/sublime-monokai-extended"]
+	path = assets/themes/sublime-monokai-extended
+	url = git@github.com:jonschlinkert/sublime-monokai-extended.git
+	branch = master
