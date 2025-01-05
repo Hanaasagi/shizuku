@@ -9,6 +9,7 @@ use std::ffi::CString;
 use std::fmt::Display;
 use std::ptr;
 
+// ******************************* String Utilities *******************************
 macro_rules! s_cstr {
     ($s:expr) => {{
         const BUFFER_SIZE: usize = 256;
@@ -24,6 +25,12 @@ macro_rules! s_cstr {
         buffer.as_ptr() as *const i8
     }};
 }
+
+fn c_str_from_ptr(ptr: *mut i8) -> String {
+    unsafe { CString::from_raw(ptr).to_string_lossy().into_owned() }
+}
+
+// ******************************* LLVM Utilities *******************************
 
 struct LLVMVersion {
     major: u32,
@@ -50,6 +57,122 @@ impl LLVMVersion {
 impl Display for LLVMVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+// Save the LLVM module to a `.ll` file.
+fn save_module_to_ll(module: LLVMModuleRef, filename: &str) {
+    unsafe {
+        if LLVMPrintModuleToFile(module, s_cstr!(filename), ptr::null_mut()) != 0 {
+            panic!("Failed to write the module to a .ll file");
+        } else {
+            println!("Module saved to {}", filename);
+        }
+    }
+}
+
+// Generate the assembly file from the module.
+fn generate_assembly(module: LLVMModuleRef, filename: &str) {
+    unsafe {
+        let c_filename = s_cstr!(filename);
+        let target_triple = LLVMGetDefaultTargetTriple();
+        let mut target = std::ptr::null_mut();
+        let mut error = std::ptr::null_mut();
+
+        if LLVMGetTargetFromTriple(target_triple, &mut target, &mut error) != 0 {
+            panic!(
+                "Failed to get target: {}",
+                std::ffi::CStr::from_ptr(error).to_string_lossy()
+            );
+        }
+
+        let target_machine = LLVMCreateTargetMachine(
+            target,
+            target_triple,
+            c"generic".as_ptr(),
+            c"".as_ptr(),
+            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+            LLVMRelocMode::LLVMRelocDefault,
+            LLVMCodeModel::LLVMCodeModelDefault,
+        );
+
+        if LLVMTargetMachineEmitToFile(
+            target_machine,
+            module,
+            c_filename,
+            LLVMAssemblyFile,
+            ptr::null_mut(),
+        ) != 0
+        {
+            panic!("Failed to generate assembly");
+        } else {
+            println!("Assembly saved to {}", filename);
+        }
+
+        LLVMDisposeTargetMachine(target_machine);
+    }
+}
+
+// Modify the generate_assembly function to generate a target object file
+fn generate_target(module: LLVMModuleRef, filename: &str) {
+    unsafe {
+        let target_triple = LLVMGetDefaultTargetTriple();
+        let mut target = std::ptr::null_mut();
+        let mut error = std::ptr::null_mut();
+
+        if LLVMGetTargetFromTriple(target_triple, &mut target, &mut error) != 0 {
+            panic!(
+                "Failed to get target: {}",
+                std::ffi::CStr::from_ptr(error).to_string_lossy()
+            );
+        }
+
+        let target_machine = LLVMCreateTargetMachine(
+            target,
+            target_triple,
+            c"generic".as_ptr(),
+            c"".as_ptr(),
+            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+            LLVMRelocMode::LLVMRelocDefault,
+            LLVMCodeModel::LLVMCodeModelDefault,
+        );
+
+        let output_file = std::ffi::CString::new(filename).unwrap();
+
+        if LLVMTargetMachineEmitToFile(
+            target_machine,
+            module,
+            output_file.as_ptr() as *mut _,
+            LLVMCodeGenFileType::LLVMObjectFile,
+            &mut error,
+        ) != 0
+        {
+            panic!(
+                "Failed to emit object file: {}",
+                std::ffi::CStr::from_ptr(error).to_string_lossy()
+            );
+        }
+
+        println!("Generated object file: {}", filename);
+
+        LLVMDisposeTargetMachine(target_machine);
+    }
+}
+
+// Link the object file to generate an executable ELF file
+fn link_object_to_executable(object_filename: &str, output_filename: &str) {
+    let status = std::process::Command::new("gcc")
+        .arg(object_filename)
+        .arg("-o")
+        .arg(output_filename)
+        .arg("-no-pie")
+        .status()
+        .expect("Failed to execute gcc");
+
+    if status.success() {
+        println!("Executable file created: {}", output_filename);
+    } else {
+        panic!("Linking failed");
     }
 }
 
@@ -254,145 +377,5 @@ fn main() {
         LLVMDisposeBuilder(builder);
         LLVMDisposeExecutionEngine(engine);
         LLVMContextDispose(context);
-    }
-}
-
-// Save the LLVM module to a `.ll` file.
-fn save_module_to_ll(module: LLVMModuleRef, filename: &str) {
-    unsafe {
-        if LLVMPrintModuleToFile(module, s_cstr!(filename), ptr::null_mut()) != 0 {
-            panic!("Failed to write the module to a .ll file");
-        } else {
-            println!("Module saved to {}", filename);
-        }
-    }
-}
-
-// Generate the assembly file from the module.
-fn generate_assembly(module: LLVMModuleRef, filename: &str) {
-    unsafe {
-        let c_filename = s_cstr!(filename);
-        let target_triple = LLVMGetDefaultTargetTriple();
-        let mut target = std::ptr::null_mut();
-        let mut error = std::ptr::null_mut();
-
-        if LLVMGetTargetFromTriple(target_triple, &mut target, &mut error) != 0 {
-            panic!(
-                "Failed to get target: {}",
-                std::ffi::CStr::from_ptr(error).to_string_lossy()
-            );
-        }
-
-        let target_machine = LLVMCreateTargetMachine(
-            target,
-            target_triple,
-            c"generic".as_ptr(),
-            c"".as_ptr(),
-            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
-            LLVMRelocMode::LLVMRelocDefault,
-            LLVMCodeModel::LLVMCodeModelDefault,
-        );
-
-        if LLVMTargetMachineEmitToFile(
-            target_machine,
-            module,
-            c_filename,
-            LLVMAssemblyFile,
-            ptr::null_mut(),
-        ) != 0
-        {
-            panic!("Failed to generate assembly");
-        } else {
-            println!("Assembly saved to {}", filename);
-        }
-
-        LLVMDisposeTargetMachine(target_machine);
-    }
-}
-
-// #[inline]
-// fn c_str(s: &str) -> *const i8{
-//     // return CString::new(s).unwrap();
-//     let mut buffer = [0u8; 256];
-
-//     if s.len() >= buffer.len() {
-//         panic!(
-//             "Filename is too long, maximum length is {}",
-//             buffer.len() - 1
-//         );
-//     }
-
-//     buffer[..s.len()].copy_from_slice(s.as_bytes());
-//     buffer[s.len()] = 0; // Null terminator
-
-//     let c_s = buffer.as_ptr() as *const i8;
-//     return c_s
-// }
-
-fn c_str_from_ptr(ptr: *mut i8) -> String {
-    unsafe { CString::from_raw(ptr).to_string_lossy().into_owned() }
-}
-
-// Modify the generate_assembly function to generate a target object file
-fn generate_target(module: LLVMModuleRef, filename: &str) {
-    unsafe {
-        let target_triple = LLVMGetDefaultTargetTriple();
-        let mut target = std::ptr::null_mut();
-        let mut error = std::ptr::null_mut();
-
-        if LLVMGetTargetFromTriple(target_triple, &mut target, &mut error) != 0 {
-            panic!(
-                "Failed to get target: {}",
-                std::ffi::CStr::from_ptr(error).to_string_lossy()
-            );
-        }
-
-        let target_machine = LLVMCreateTargetMachine(
-            target,
-            target_triple,
-            c"generic".as_ptr(),
-            c"".as_ptr(),
-            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
-            LLVMRelocMode::LLVMRelocDefault,
-            LLVMCodeModel::LLVMCodeModelDefault,
-        );
-
-        let output_file = std::ffi::CString::new(filename).unwrap();
-
-        if LLVMTargetMachineEmitToFile(
-            target_machine,
-            module,
-            output_file.as_ptr() as *mut _,
-            LLVMCodeGenFileType::LLVMObjectFile,
-            &mut error,
-        ) != 0
-        {
-            panic!(
-                "Failed to emit object file: {}",
-                std::ffi::CStr::from_ptr(error).to_string_lossy()
-            );
-        }
-
-        println!("Generated object file: {}", filename);
-
-        LLVMDisposeTargetMachine(target_machine);
-    }
-}
-
-// Link the object file to generate an executable ELF file
-fn link_object_to_executable(object_filename: &str, output_filename: &str) {
-
-    let status = std::process::Command::new("gcc")
-        .arg(object_filename)
-        .arg("-o")
-        .arg(output_filename)
-        .arg("-no-pie")
-        .status()
-        .expect("Failed to execute gcc");
-
-    if status.success() {
-        println!("Executable file created: {}", output_filename);
-    } else {
-        panic!("Linking failed");
     }
 }
