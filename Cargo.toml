@@ -9,3 +9,4 @@ anyhow = "1.0.94"
 colored = "2.1.0"
 ecow = "0.2.3"
 syntect = { version = "5.2.0", features = ["parsing"] }
+unicode-xid = "0.2.6"
