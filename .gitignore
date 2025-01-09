@@ -57,3 +57,5 @@ output.ll
 output.s
 a.ll
 a.s
+*.szk
+__t
