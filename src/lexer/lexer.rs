@@ -3,6 +3,8 @@ use super::utils::is_hex_decimal;
 use super::utils::is_id_continue;
 use super::utils::is_id_start;
 use super::utils::is_whitespace;
+use crate::lexer::utils::is_binary;
+use crate::lexer::utils::is_octal;
 use crate::token::Base;
 use crate::token::Token;
 use ecow::EcoString;
@@ -14,9 +16,21 @@ pub struct SrcSpan {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum LiteralType {
+    String,
+    Binary,
+    Octal,
+    Decimal,
+    Hexadecimal,
+    Float,
+    ScientificNotationFloat,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum LexicalErrorType {
     UnexpectedStringEnd, // Unterminated string literal
     UnrecognizedToken { tok: char },
+    IllegalLiteral { typ: LiteralType, tok: char },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -213,7 +227,7 @@ where
             ',' => {
                 self.consume_single_char_token(Token::Comma);
             }
-            '.' => {
+            '.' if self.chr1.is_some() && !is_decimal(self.chr1.unwrap()) => {
                 self.consume_single_char_token(Token::Dot);
             }
             '#' => {
@@ -285,8 +299,8 @@ where
                 self.emit(id_or_keyword);
             }
             //
-            c @ '0'..='9' => {
-                let number_like = self.consume_number_like();
+            '0'..='9' | '.' => {
+                let number_like = self.consume_number_like()?;
                 self.emit(number_like);
             }
             c => {
@@ -366,13 +380,10 @@ fn test_comment() {
 
         let start = token.0 as usize;
         let end = token.2 as usize;
-        assert_eq!(
-            &source[start..end],
-            match &expected_token.1 {
-                Token::Comment { content } => content.as_str(),
-                _ => panic!("Expected a Comment token"),
-            }
-        );
+        assert_eq!(&source[start..end], match &expected_token.1 {
+            Token::Comment { content } => content.as_str(),
+            _ => panic!("Expected a Comment token"),
+        });
     }
 
     test_lexer_comment(
@@ -421,13 +432,10 @@ fn test_comment_doc() {
 
         let start = token.0 as usize;
         let end = token.2 as usize;
-        assert_eq!(
-            &source[start..end],
-            match &expected_token.1 {
-                Token::CommentDoc { content } => content.as_str(),
-                _ => panic!("Expected a DocComment token"),
-            }
-        );
+        assert_eq!(&source[start..end], match &expected_token.1 {
+            Token::CommentDoc { content } => content.as_str(),
+            _ => panic!("Expected a DocComment token"),
+        });
     }
 
     test_lexer_comment_doc(
@@ -468,73 +476,222 @@ impl<I> Lexer<I>
 where
     I: Iterator<Item = (LOC, char)>,
 {
-    fn consume_number_like(&mut self) -> Spanned {
+    fn consume_number_like(&mut self) -> LexResult {
+        enum State {
+            Initial,
+            Binary,
+            Octal,
+            Decimal,
+            Hexadecimal,
+            Float,
+            ScientificNotationFloat,
+        }
+
         debug_assert!(self.chr0.is_some());
 
         let chr = self.chr0.unwrap();
-        debug_assert!(chr.is_ascii_digit());
+        debug_assert!(chr.is_ascii_digit() || chr == '.');
 
         let mut value = EcoString::new();
         let start = self.get_pos();
 
-        let mut base = Base::Decimal;
+        let mut state = State::Initial;
+
+        // handle base `0b`, `0o`, `0x`
         if chr == '0' {
             value.push(chr);
             self.consume();
+            // `0`
             if self.chr0.is_none() {
                 let end = self.get_pos();
-                return (
+                return Ok((
                     start,
                     Token::Int {
                         base: Base::Decimal,
                         value,
                     },
                     end,
-                );
+                ));
             }
 
-            base = match self.chr0.unwrap() {
+            state = match self.chr0.unwrap() {
                 'b' => {
                     value.push(self.chr0.unwrap());
                     self.consume();
-                    Base::Binary
+                    State::Binary
                 }
                 'o' => {
                     value.push(self.chr0.unwrap());
                     self.consume();
-                    Base::Octal
+                    State::Octal
                 }
                 'x' => {
                     value.push(self.chr0.unwrap());
                     self.consume();
-                    Base::Hexadecimal
+                    State::Hexadecimal
                 }
-                _ => Base::Decimal,
+                _ => State::Initial,
             };
         }
 
-        let allow_chars = if base == Base::Hexadecimal {
-            is_hex_decimal
-        } else {
-            is_decimal
-        };
+        assert!(matches!(
+            state,
+            State::Initial | State::Binary | State::Octal | State::Decimal | State::Hexadecimal
+        ));
 
         while let Some(chr) = self.chr0 {
-            if chr == '_' || allow_chars(chr) {
-                value.push(chr);
-                self.consume();
-            } else {
+            if is_whitespace(chr) {
                 break;
+            }
+            match state {
+                // SyntaxError: invalid digit '6' in binary literal
+                State::Binary | State::Octal | State::Hexadecimal => {
+                    let is_allow_chars = match state {
+                        State::Binary => is_binary,
+                        State::Octal => is_octal,
+                        State::Hexadecimal => is_hex_decimal,
+                        _ => is_hex_decimal,
+                    };
+                    if chr == '_' || is_allow_chars(chr) {
+                        value.push(chr);
+                        self.consume();
+                    } else {
+                        let end = self.get_pos();
+                        let typ = match state {
+                            State::Binary => LiteralType::Binary,
+                            State::Octal => LiteralType::Octal,
+                            State::Hexadecimal => LiteralType::Hexadecimal,
+                            _ => unreachable!(),
+                        };
+                        return Err(LexicalError {
+                            error: LexicalErrorType::IllegalLiteral { typ: typ, tok: chr },
+                            location: SrcSpan { start, end },
+                        });
+                    }
+                }
+                State::Initial | State::Decimal => {
+                    // handle decimal or float
+                    if chr == '.' {
+                        state = State::Float;
+                        value.push(chr);
+                        self.consume();
+                    } else if chr == 'e' || chr == 'E' {
+                        state = State::ScientificNotationFloat;
+                        value.push(chr);
+                        self.consume();
+                        if let Some(next_chr) = self.chr0 {
+                            if next_chr == '+' || next_chr == '-' {
+                                value.push(next_chr);
+                                self.consume();
+                            }
+                        }
+                    } else if chr == '_' || is_decimal(chr) {
+                        value.push(chr);
+                        self.consume();
+                    } else {
+                        let end = self.get_pos();
+                        return Err(LexicalError {
+                            error: LexicalErrorType::IllegalLiteral {
+                                typ: LiteralType::Decimal,
+                                tok: chr,
+                            },
+                            location: SrcSpan { start, end },
+                        });
+                    }
+                }
+                State::Float => {
+                    if chr == '_' || is_decimal(chr) {
+                        value.push(chr);
+                        self.consume();
+                    } else if chr == 'e' || chr == 'E' {
+                        state = State::ScientificNotationFloat;
+                        value.push(chr);
+                        self.consume();
+
+                        if let Some(next_chr) = self.chr0 {
+                            if next_chr == '+' || next_chr == '-' {
+                                value.push(next_chr);
+                                self.consume();
+                            }
+                        }
+                    } else {
+                        let end = self.get_pos();
+                        let typ = match state {
+                            State::Float => LiteralType::Float,
+                            State::ScientificNotationFloat => LiteralType::ScientificNotationFloat,
+                            _ => unreachable!(),
+                        };
+                        return Err(LexicalError {
+                            error: LexicalErrorType::IllegalLiteral { typ, tok: chr },
+                            location: SrcSpan { start, end },
+                        });
+                    }
+                }
+                State::ScientificNotationFloat => {
+                    if chr == '_' || is_decimal(chr) {
+                        value.push(chr);
+                        self.consume();
+                    } else if chr == 'e' || chr == 'E' {
+                        state = State::ScientificNotationFloat;
+                        value.push(chr);
+                        self.consume();
+
+                        if let Some(next_chr) = self.chr0 {
+                            if next_chr == '+' || next_chr == '-' {
+                                value.push(next_chr);
+                                self.consume();
+                            }
+                        }
+                    } else {
+                        let end = self.get_pos();
+                        let typ = match state {
+                            State::Float => LiteralType::Float,
+                            State::ScientificNotationFloat => LiteralType::ScientificNotationFloat,
+                            _ => unreachable!(),
+                        };
+                        return Err(LexicalError {
+                            error: LexicalErrorType::IllegalLiteral { typ, tok: chr },
+                            location: SrcSpan { start, end },
+                        });
+                    }
+                }
             }
         }
         let end = self.get_pos();
-        (start, Token::Int { base, value }, end)
+
+        if matches!(state, State::Float | State::ScientificNotationFloat) {
+            let is_scientific = match state {
+                State::Float => false,
+                State::ScientificNotationFloat => true,
+                _ => unreachable!(),
+            };
+            Ok((
+                start,
+                Token::Float {
+                    is_scientific,
+                    value,
+                },
+                end,
+            ))
+        } else {
+            if matches!(state, State::Initial) {
+                state = State::Decimal;
+            }
+            let base = match state {
+                State::Hexadecimal => Base::Hexadecimal,
+                State::Octal => Base::Octal,
+                State::Binary => Base::Binary,
+                State::Decimal => Base::Decimal,
+                _ => unreachable!(),
+            };
+            Ok((start, Token::Int { base, value }, end))
+        }
     }
 }
 
 #[test]
 fn test_int() {
-    let source = "32_64 0b16 0xFF 0o8 0";
+    let source = "32_64 0b10 0xFF 0o7 0";
     let chars = source.char_indices().map(|(i, c)| (i as u32, c));
     let mut lexer = Lexer::new(chars);
 
@@ -551,7 +708,7 @@ fn test_int() {
             6,
             Token::Int {
                 base: Base::Binary,
-                value: "0b16".into(),
+                value: "0b10".into(),
             },
             10,
         ),
@@ -567,7 +724,7 @@ fn test_int() {
             16,
             Token::Int {
                 base: Base::Octal,
-                value: "0o8".into(),
+                value: "0o7".into(),
             },
             19,
         ),
@@ -720,5 +877,68 @@ fn test_function() {
     for (start, token, end) in expected_tokens {
         let actual = lexer._next().unwrap();
         assert_eq!(actual, (start, token, end));
+    }
+}
+
+#[test]
+fn test_float() {
+    let source = "3.14 .5 10. 1e10 2.9e-3 3E+4";
+    let chars = source.char_indices().map(|(i, c)| (i as u32, c));
+    let mut lexer = Lexer::new(chars);
+
+    let expected_tokens = vec![
+        (
+            0,
+            Token::Float {
+                is_scientific: false,
+                value: "3.14".into(),
+            },
+            4,
+        ),
+        (
+            5,
+            Token::Float {
+                is_scientific: false,
+                value: ".5".into(),
+            },
+            7,
+        ),
+        (
+            8,
+            Token::Float {
+                is_scientific: false,
+                value: "10.".into(),
+            },
+            11,
+        ),
+        (
+            12,
+            Token::Float {
+                is_scientific: true,
+                value: "1e10".into(),
+            },
+            16,
+        ),
+        (
+            17,
+            Token::Float {
+                is_scientific: true,
+                value: "2.9e-3".into(),
+            },
+            23,
+        ),
+        (
+            24,
+            Token::Float {
+                is_scientific: true,
+                value: "3E+4".into(),
+            },
+            28,
+        ),
+    ];
+
+    for (start, expected_token, end) in expected_tokens {
+        let token = lexer._next().unwrap();
+        assert_eq!(token, (start, expected_token, end));
     }
 }

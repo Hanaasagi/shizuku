@@ -49,10 +49,22 @@ pub fn is_id_continue(c: char) -> bool {
         || (c > '\x7f' && unicode_xid::UnicodeXID::is_xid_continue(c))
 }
 
-pub fn is_hex_decimal(c: char) -> bool {
-    c.is_ascii_digit() || ('a'..='f').contains(&c) || ('A'..='F').contains(&c)
+#[inline]
+pub fn is_binary(c: char) -> bool {
+    c == '0' || c == '1'
 }
 
+#[inline]
+pub fn is_octal(c: char) -> bool {
+    ('0'..='7').contains(&c)
+}
+
+#[inline]
 pub fn is_decimal(c: char) -> bool {
     c.is_ascii_digit()
+}
+
+#[inline]
+pub fn is_hex_decimal(c: char) -> bool {
+    c.is_ascii_digit() || ('a'..='f').contains(&c) || ('A'..='F').contains(&c)
 }
