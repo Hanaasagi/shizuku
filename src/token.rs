@@ -30,7 +30,7 @@ pub enum Token {
     },
     /// Floating-point literal (e.g., `3.14`)
     Float {
-        is_scientific: bool,
+        has_exp: bool,
         value: EcoString,
     },
     /// String literal (e.g., `"hello"`)
