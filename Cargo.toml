@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-llvm-sys = "181"
+llvm-sys = "191"
 anyhow = "1.0.94"
 colored = "2.1.0"
 ecow = "0.2.3"

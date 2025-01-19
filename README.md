@@ -10,4 +10,4 @@ llvm-config --version
 
 ### llvm-sys
 
-https://docs.rs/llvm-sys/181.2.0/llvm_sys/index.html
+https://docs.rs/llvm-sys/191.0.0/llvm_sys/index.html
