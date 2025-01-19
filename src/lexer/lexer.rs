@@ -385,13 +385,10 @@ fn test_comment() {
 
         let start = token.0 as usize;
         let end = token.2 as usize;
-        assert_eq!(
-            &source[start..end],
-            match &expected_token.1 {
-                Token::Comment { content } => content.as_str(),
-                _ => panic!("Expected a Comment token"),
-            }
-        );
+        assert_eq!(&source[start..end], match &expected_token.1 {
+            Token::Comment { content } => content.as_str(),
+            _ => panic!("Expected a Comment token"),
+        });
     }
 
     test_lexer_comment(
@@ -440,13 +437,10 @@ fn test_comment_doc() {
 
         let start = token.0 as usize;
         let end = token.2 as usize;
-        assert_eq!(
-            &source[start..end],
-            match &expected_token.1 {
-                Token::CommentDoc { content } => content.as_str(),
-                _ => panic!("Expected a DocComment token"),
-            }
-        );
+        assert_eq!(&source[start..end], match &expected_token.1 {
+            Token::CommentDoc { content } => content.as_str(),
+            _ => panic!("Expected a DocComment token"),
+        });
     }
 
     test_lexer_comment_doc(
