@@ -33,6 +33,10 @@ pub enum Token {
         has_exp: bool,
         value: EcoString,
     },
+    /// Char literal (e.g., `'h'`)
+    Char {
+        value: char,
+    },
     /// String literal (e.g., `"hello"`)
     String {
         value: EcoString,

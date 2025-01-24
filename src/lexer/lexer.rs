@@ -30,8 +30,9 @@ pub enum LiteralType {
 pub enum LexicalErrorType {
     UnexpectedStringEnd, // Unterminated string literal
     UnrecognizedToken { tok: char },
-    // IllegalLiteral { typ: LiteralType, tok: char },
     IllegalLiteral { tok: char },
+    UnexpectedCharEnd, // Unterminated char literal
+    EmptyCharLiteral,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -174,7 +175,20 @@ where
     I: Iterator<Item = (LOC, char)>,
 {
     fn advance_token(&mut self) -> Result<(), LexicalError> {
-        self.skip_while(is_whitespace);
+        while let Some(c) = self.chr0 {
+            if is_whitespace(c) {
+                if c == '\n' {
+                    let start = self.get_pos();
+                    self.consume();
+                    let end = self.get_pos();
+                    self.emit((start, Token::NewLine, end));
+                } else {
+                    self.consume();
+                }
+            } else {
+                break;
+            }
+        }
         if let Some(c) = self.chr0 {
             self._advance_token()?;
         } else {
@@ -228,9 +242,25 @@ where
             ',' => {
                 self.consume_single_char_token(Token::Comma);
             }
-            '.' if self.chr1.is_some() && !is_decimal(self.chr1.unwrap()) => {
-                self.consume_single_char_token(Token::Dot);
-            }
+            // FIXME:
+            // '.' => {
+            //     let start = self.get_pos();
+            //     match self.chr1 {
+            //         Some('.') => {
+            //             let _ = self.consume();
+            //             let end = self.get_pos();
+            //             self.emit((start, Token::DotDot, end));
+            //         }
+            //         _ if !is_decimal(self.chr1.unwrap_or(' ')) => {
+            //             let end = self.get_pos();
+            //             self.emit((start, Token::Dot, end));
+            //         }
+            //         _ => {
+            //             // Handle decimal numbers
+            //             self.consume_number_like()?;
+            //         }
+            //     }
+            // }
             '#' => {
                 self.consume_single_char_token(Token::Hash);
             }
@@ -285,6 +315,77 @@ where
                     }
                 }
             }
+            '!' => {
+                let start = self.get_pos();
+                let _ = self.consume();
+                match self.chr0 {
+                    Some('=') => {
+                        let _ = self.consume();
+                        let end = self.get_pos();
+                        self.emit((start, Token::NotEqual, end));
+                    }
+                    _ => {
+                        let end = self.get_pos();
+                        self.emit((start, Token::Bang, end));
+                    }
+                }
+            }
+            '<' => {
+                let start = self.get_pos();
+                let _ = self.consume();
+                match self.chr0 {
+                    Some('=') => {
+                        let _ = self.consume();
+                        let end = self.get_pos();
+                        self.emit((start, Token::LessThanEqual, end));
+                    }
+                    Some('-') => {
+                        let _ = self.consume();
+                        let end = self.get_pos();
+                        self.emit((start, Token::LArrow, end));
+                    }
+                    _ => {
+                        let end = self.get_pos();
+                        self.emit((start, Token::LessThan, end));
+                    }
+                }
+            }
+            '>' => {
+                let start = self.get_pos();
+                let _ = self.consume();
+                match self.chr0 {
+                    Some('=') => {
+                        let _ = self.consume();
+                        let end = self.get_pos();
+                        self.emit((start, Token::GreaterThanEqual, end));
+                    }
+                    _ => {
+                        let end = self.get_pos();
+                        self.emit((start, Token::GreaterThan, end));
+                    }
+                }
+            }
+            '|' => {
+                let start = self.get_pos();
+                let _ = self.consume();
+                match self.chr0 {
+                    Some('>') => {
+                        let _ = self.consume();
+                        let end = self.get_pos();
+                        self.emit((start, Token::Pipe, end));
+                    }
+                    _ => {
+                        let end = self.get_pos();
+                        self.emit((start, Token::Vbar, end));
+                    }
+                }
+            }
+            '&' => {
+                self.consume_single_char_token(Token::Amper);
+            }
+            '?' => {
+                self.consume_single_char_token(Token::Question);
+            }
 
             '/' => {
                 // handle //
@@ -298,6 +399,18 @@ where
                     }
                 }
                 let _ = self.consume();
+            }
+            '\'' => {
+                let char_lit = self.consume_char_literal()?;
+                self.emit(char_lit);
+            }
+            '"' => {
+                let string_lit = self.consume_string_literal()?;
+                self.emit(string_lit);
+            }
+            c if is_id_start(c) => {
+                let id_or_keyword = self.consume_ident_or_keyword();
+                self.emit(id_or_keyword);
             }
             c if is_id_start(c) => {
                 let id_or_keyword = self.consume_ident_or_keyword();
@@ -555,6 +668,7 @@ fn test_function() {
     let mut lexer = Lexer::new(chars);
 
     let expected_tokens = vec![
+        (0, Token::NewLine, 1), // First newline from initial empty line
         (5, Token::Fn, 7),
         (8, Token::Ident { name: "sum".into() }, 11),
         (11, Token::LParen, 12),
@@ -581,6 +695,7 @@ fn test_function() {
         (34, Token::RArrow, 36),
         (37, Token::Ident { name: "i32".into() }, 40),
         (41, Token::LBrace, 42),
+        (42, Token::NewLine, 43), // Newline after {
         (51, Token::Let, 54),
         (55, Token::Ident { name: "sum".into() }, 58),
         (59, Token::Equal, 60),
@@ -600,15 +715,186 @@ fn test_function() {
             72,
         ),
         (72, Token::Semicolon, 73),
+        (73, Token::NewLine, 74), // Newline after let statement
         (82, Token::Return, 88),
         (89, Token::Ident { name: "sum".into() }, 92),
         (92, Token::Semicolon, 93),
+        (93, Token::NewLine, 94), // Newline after return statement
         (98, Token::RBrace, 99),
-        (104, Token::EOF, 104),
+        (99, Token::NewLine, 100), // Newline after }
+        (104, Token::EOF, 104),    // EOF at end of input
     ];
 
     for (start, token, end) in expected_tokens {
         let actual = lexer._next().unwrap();
         assert_eq!(actual, (start, token, end));
     }
+}
+
+impl<I> Lexer<I>
+where
+    I: Iterator<Item = (LOC, char)>,
+{
+    fn consume_char_literal(&mut self) -> Result<Spanned, LexicalError> {
+        debug_assert!(self.chr0 == Some('\''));
+
+        let start = self.get_pos();
+        self.consume();
+
+        let chr = match self.chr0 {
+            Some('\'') => {
+                self.consume();
+                return Err(LexicalError {
+                    error: LexicalErrorType::EmptyCharLiteral,
+                    location: SrcSpan {
+                        start,
+                        end: self.get_pos(),
+                    },
+                });
+            }
+            Some(c) => {
+                self.consume();
+                c
+            }
+            None => {
+                return Err(LexicalError {
+                    error: LexicalErrorType::UnexpectedCharEnd,
+                    location: SrcSpan {
+                        start,
+                        end: start + 1,
+                    },
+                });
+            }
+        };
+
+        if self.chr0 != Some('\'') {
+            return Err(LexicalError {
+                error: LexicalErrorType::UnexpectedCharEnd,
+                location: SrcSpan {
+                    start,
+                    end: self.get_pos(),
+                },
+            });
+        }
+
+        self.consume(); // Consume closing quote
+        let end = self.get_pos();
+
+        Ok((start, Token::Char { value: chr }, end))
+    }
+
+    fn consume_string_literal(&mut self) -> Result<Spanned, LexicalError> {
+        debug_assert!(self.chr0 == Some('"'));
+
+        let start = self.get_pos();
+        self.consume(); // Consume opening quote
+
+        let mut content = EcoString::new();
+
+        while let Some(c) = self.chr0 {
+            if c == '"' {
+                break;
+            }
+            content.push(c);
+            self.consume();
+        }
+
+        if self.chr0 != Some('"') {
+            return Err(LexicalError {
+                error: LexicalErrorType::UnexpectedStringEnd,
+                location: SrcSpan {
+                    start,
+                    end: self.get_pos(),
+                },
+            });
+        }
+
+        self.consume(); // Consume closing quote
+        let end = self.get_pos();
+
+        Ok((start, Token::String { value: content }, end))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    macro_rules! test_string_literal {
+        ($name:ident, $source:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let chars = $source.char_indices().map(|(i, c)| (i as u32, c));
+                let mut lexer = Lexer::new(chars);
+
+                let token = lexer._next().unwrap();
+                assert_eq!(token, $expected);
+            }
+        };
+    }
+
+    macro_rules! test_invalid_string_literal {
+        ($name:ident, $source:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let chars = $source.char_indices().map(|(i, c)| (i as u32, c));
+                let mut lexer = Lexer::new(chars);
+
+                let token = lexer._next().unwrap_err();
+                assert_eq!(token, $expected);
+            }
+        };
+    }
+
+    test_string_literal!(
+        test_string_literal,
+        r#""hello world""#,
+        (
+            0,
+            Token::String {
+                value: "hello world".into()
+            },
+            r#""hello world""#.len() as u32
+        )
+    );
+
+    test_string_literal!(
+        test_empty_string_literal,
+        r#""""#,
+        (0, Token::String { value: "".into() }, r#""""#.len() as u32)
+    );
+
+    test_string_literal!(
+        test_char_literal,
+        "'a'",
+        (0, Token::Char { value: 'a' }, "'a'".len() as u32)
+    );
+
+    test_string_literal!(
+        test_special_char_literal,
+        "'\n'",
+        (0, Token::Char { value: '\n' }, "'\n'".len() as u32)
+    );
+
+    test_invalid_string_literal!(
+        test_unterminated_string_literal,
+        r#""hello world"#,
+        LexicalError {
+            error: LexicalErrorType::UnexpectedStringEnd,
+            location: SrcSpan {
+                start: 0,
+                end: r#""hello world"#.len() as u32
+            }
+        }
+    );
+
+    test_invalid_string_literal!(test_unterminated_char_literal, "'a", LexicalError {
+        error: LexicalErrorType::UnexpectedCharEnd,
+        location: SrcSpan { start: 0, end: 2 }
+    });
+
+    test_invalid_string_literal!(test_empty_char_literal, "''", LexicalError {
+        error: LexicalErrorType::EmptyCharLiteral,
+        location: SrcSpan { start: 0, end: 2 }
+    });
 }
