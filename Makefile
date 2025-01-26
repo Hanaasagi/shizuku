@@ -13,6 +13,7 @@ test: ## Run tests
 .PHONY: fmt
 fmt: ## Format code
 	@cargo fmt
+	@find . -type f -name "*.toml" -exec taplo format {} \;
 
 .PHONY: lint
 lint: ## Lint code

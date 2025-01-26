@@ -1,0 +1,8 @@
+[package]
+name = "shizuku-codegen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+llvm-sys = "191"
+syntect = { version = "5.2.0", features = ["parsing"] }

@@ -1,0 +1,12 @@
+[package]
+name = "shizuku-parser"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+ecow = { workspace = true }
+unicode-xid = "0.2.6"

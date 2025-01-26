@@ -1,12 +1,21 @@
-[package]
-name = "shizuku"
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+authors = ["Hanaasagi <ambiguous404@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Hanaasagi/shizuku"
+homepage = "https://github.com/Hanaasagi/shizuku"
 
-[dependencies]
-llvm-sys = "191"
+[workspace]
+resolver = "2"
+members = [
+  "crates/shizuku-codegen",
+  "crates/shizuku-common",
+  "crates/shizuku-ir",
+  "crates/shizuku-parser",
+]
+
+[workspace.dependencies]
 anyhow = "1.0.94"
 colored = "2.1.0"
 ecow = "0.2.3"
-syntect = { version = "5.2.0", features = ["parsing"] }
-unicode-xid = "0.2.6"
