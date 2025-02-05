@@ -3,4 +3,12 @@
 pub mod ast;
 pub mod lexer;
 pub mod parser;
-pub mod token;
+mod span;
+mod token;
+
+pub use lexer::Lexer;
+pub use lexer::LexicalError;
+pub use lexer::LexicalErrorType;
+pub use span::SrcSpan;
+pub use token::Base as NumberBase;
+pub use token::Token;

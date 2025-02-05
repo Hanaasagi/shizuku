@@ -143,8 +143,6 @@ pub enum Token {
     If,
     /// `else` keyword
     Else,
-    /// `else if` keyword
-    ElseIf,
     /// `and` keyword
     And,
     /// `or` keyword
@@ -173,6 +171,8 @@ pub enum Token {
     Await,
     /// `return` keyword
     Return,
+    /// `test` keyword
+    Test,
 }
 
 const KEYWORDS: &[Token] = &[
@@ -181,7 +181,6 @@ const KEYWORDS: &[Token] = &[
     Token::Fn,
     Token::If,
     Token::Else,
-    Token::ElseIf,
     Token::And,
     Token::Or,
     Token::Import,
@@ -196,6 +195,7 @@ const KEYWORDS: &[Token] = &[
     Token::Async,
     Token::Await,
     Token::Return,
+    Token::Test,
     // Total: 19
 ];
 
@@ -206,11 +206,11 @@ impl Token {
 
     pub fn try_from_keywords(word: &str) -> Option<Token> {
         match word {
+            "as" => Some(Token::As),
             "const" => Some(Token::Const),
             "fn" => Some(Token::Fn),
             "if" => Some(Token::If),
             "else" => Some(Token::Else),
-            "elseif" => Some(Token::ElseIf),
             "and" => Some(Token::And),
             "or" => Some(Token::Or),
             "import" => Some(Token::Import),
@@ -223,7 +223,9 @@ impl Token {
             "break" => Some(Token::Break),
             "continue" => Some(Token::Continue),
             "async" => Some(Token::Async),
+            "await" => Some(Token::Await),
             "return" => Some(Token::Return),
+            "test" => Some(Token::Test),
             _ => None,
         }
     }

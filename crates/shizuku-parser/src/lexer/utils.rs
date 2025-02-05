@@ -3,6 +3,7 @@
 /// True if `c` is considered a whitespace according to Rust language definition.
 /// See [Rust language reference](https://doc.rust-lang.org/reference/whitespace.html)
 /// for definitions of these classes.
+#[inline]
 pub fn is_whitespace(c: char) -> bool {
     // This is Pattern_White_Space.
     //
@@ -33,6 +34,7 @@ pub fn is_whitespace(c: char) -> bool {
 }
 
 /// True if `c` is valid as a first character of an identifier.
+#[inline]
 pub fn is_id_start(c: char) -> bool {
     c.is_ascii_lowercase()
         || c.is_ascii_uppercase()
@@ -41,30 +43,11 @@ pub fn is_id_start(c: char) -> bool {
 }
 
 /// True if `c` is valid as a non-first character of an identifier.
+#[inline]
 pub fn is_id_continue(c: char) -> bool {
     c.is_ascii_lowercase()
         || c.is_ascii_uppercase()
         || c.is_ascii_digit()
         || c == '_'
         || (c > '\x7f' && unicode_xid::UnicodeXID::is_xid_continue(c))
-}
-
-#[inline]
-pub fn is_binary(c: char) -> bool {
-    c == '0' || c == '1'
-}
-
-#[inline]
-pub fn is_octal(c: char) -> bool {
-    ('0'..='7').contains(&c)
-}
-
-#[inline]
-pub fn is_decimal(c: char) -> bool {
-    c.is_ascii_digit()
-}
-
-#[inline]
-pub fn is_hex_decimal(c: char) -> bool {
-    c.is_ascii_digit() || ('a'..='f').contains(&c) || ('A'..='F').contains(&c)
 }
