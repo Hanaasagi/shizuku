@@ -90,7 +90,7 @@ where
             self.consume(&Token::RParen)?;
 
             // Parse return type (`-> type`)
-            let return_type = if let Some((_, Token::RArrow, _)) = self.current_token {
+            let return_type = if let Some((_, Token::MinusRArrow, _)) = self.current_token {
                 self.advance();
                 self.parse_type()?
             } else {
@@ -239,7 +239,7 @@ where
 
         while let Some((_, token, _)) = &self.current_token {
             match token {
-                Token::Plus | Token::Minus | Token::Star | Token::Slash => {
+                Token::Plus | Token::Minus | Token::Asterisk | Token::Slash => {
                     let operator = token.clone();
                     self.advance();
                     let right = self.parse_primary()?;
@@ -302,7 +302,7 @@ fn test_parse_function_declaration() {
         (16, Token::Colon, 17),                        // :
         (18, Token::Ident { name: "i32".into() }, 21), // i32
         (21, Token::RParen, 22),                       // )
-        (23, Token::RArrow, 25),                       // ->
+        (23, Token::MinusRArrow, 25),                  // ->
         (26, Token::Ident { name: "i32".into() }, 29), // i32
         (30, Token::LBrace, 31),                       // {
         (32, Token::Return, 38),                       // return

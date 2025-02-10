@@ -37,7 +37,7 @@ fn test_function() {
         (27, Token::Colon, 28),
         (29, Token::Ident { name: "i32".into() }, 32),
         (32, Token::RParen, 33),
-        (34, Token::RArrow, 36),
+        (34, Token::MinusRArrow, 36),
         (37, Token::Ident { name: "i32".into() }, 40),
         (41, Token::LBrace, 42),
         (42, Token::NewLine, 43), // Newline after {

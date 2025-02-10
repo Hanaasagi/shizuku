@@ -197,7 +197,7 @@ where
                 // handle `->`
                 match self.chr1 {
                     Some('>') => {
-                        self.consume_expect_token(Token::RArrow, 2);
+                        self.consume_expect_token(Token::MinusRArrow, 2);
                     }
                     _ => {
                         self.consume_expect_token(Token::Minus, 1);
@@ -208,7 +208,7 @@ where
                 // handl `==`
                 match self.chr1 {
                     Some('=') => {
-                        self.consume_expect_token(Token::EqualEqual, 2);
+                        self.consume_expect_token(Token::Equal2, 2);
                     }
                     _ => {
                         self.consume_expect_token(Token::Equal, 1);
@@ -219,10 +219,10 @@ where
                 // handle `!=` or `!`
                 match self.chr1 {
                     Some('=') => {
-                        self.consume_expect_token(Token::NotEqual, 2);
+                        self.consume_expect_token(Token::ExclamationEqual, 2);
                     }
                     _ => {
-                        self.consume_expect_token(Token::Bang, 1);
+                        self.consume_expect_token(Token::Exclamation, 1);
                     }
                 }
             }
@@ -230,10 +230,10 @@ where
                 // handle `|` or `|>`
                 match self.chr1 {
                     Some('>') => {
-                        self.consume_expect_token(Token::Pipe, 2);
+                        self.consume_expect_token(Token::PipeRArrow, 2);
                     }
                     _ => {
-                        self.consume_expect_token(Token::Vbar, 1);
+                        self.consume_expect_token(Token::Pipe, 1);
                     }
                 }
             }
@@ -241,13 +241,13 @@ where
                 // handle `<` or `<=` or `<-`
                 match self.chr1 {
                     Some('=') => {
-                        self.consume_expect_token(Token::LessThanEqual, 2);
+                        self.consume_expect_token(Token::LArrowEqual, 2);
                     }
                     Some('-') => {
-                        self.consume_expect_token(Token::LArrow, 2);
+                        self.consume_expect_token(Token::LArrowMinus, 2);
                     }
                     _ => {
-                        self.consume_expect_token(Token::LessThan, 1);
+                        self.consume_expect_token(Token::LArrow, 1);
                     }
                 }
             }
@@ -255,10 +255,10 @@ where
                 // handle `>` or `>=`
                 match self.chr1 {
                     Some('=') => {
-                        self.consume_expect_token(Token::GreaterThanEqual, 2);
+                        self.consume_expect_token(Token::RArrowEqual, 2);
                     }
                     _ => {
-                        self.consume_expect_token(Token::GreaterThan, 1);
+                        self.consume_expect_token(Token::RArrow, 1);
                     }
                 }
             }
@@ -266,7 +266,7 @@ where
                 // handle `..` and `.`
                 match self.chr1 {
                     Some('.') => {
-                        self.consume_expect_token(Token::DotDot, 2);
+                        self.consume_expect_token(Token::Dot2, 2);
                     }
                     _ => {
                         self.consume_expect_token(Token::Dot, 1);
@@ -724,20 +724,20 @@ mod token_tests {
 
     test_single_token!(test_plus, "+", Token::Plus);
     test_single_token!(test_minus, "-", Token::Minus);
-    test_single_token!(test_rarrow, "->", Token::RArrow);
+    test_single_token!(test_rarrow, "->", Token::MinusRArrow);
     test_single_token!(test_equal, "=", Token::Equal);
-    test_single_token!(test_equal_equal, "==", Token::EqualEqual);
-    test_single_token!(test_band, "!", Token::Bang);
-    test_single_token!(test_not_equal, "!=", Token::NotEqual);
-    test_single_token!(test_vbar, "|", Token::Vbar);
-    test_single_token!(test_pipe, "|>", Token::Pipe);
-    test_single_token!(test_lessthan, "<", Token::LessThan);
-    test_single_token!(test_lessthan_equal, "<=", Token::LessThanEqual);
-    test_single_token!(test_larrow, "<-", Token::LArrow);
-    test_single_token!(test_greathan, ">", Token::GreaterThan);
-    test_single_token!(test_greathan_equal, ">=", Token::GreaterThanEqual);
+    test_single_token!(test_equal_equal, "==", Token::Equal2);
+    test_single_token!(test_band, "!", Token::Exclamation);
+    test_single_token!(test_not_equal, "!=", Token::ExclamationEqual);
+    test_single_token!(test_vbar, "|", Token::Pipe);
+    test_single_token!(test_pipe, "|>", Token::PipeRArrow);
+    test_single_token!(test_lessthan, "<", Token::LArrow);
+    test_single_token!(test_lessthan_equal, "<=", Token::LArrowEqual);
+    test_single_token!(test_larrow, "<-", Token::LArrowMinus);
+    test_single_token!(test_greathan, ">", Token::RArrow);
+    test_single_token!(test_greathan_equal, ">=", Token::RArrowEqual);
     test_single_token!(test_dot, ".", Token::Dot);
-    test_single_token!(test_dotdot, "..", Token::DotDot);
+    test_single_token!(test_dotdot, "..", Token::Dot2);
     test_single_token!(test_slash, "/", Token::Slash);
 
     #[test]

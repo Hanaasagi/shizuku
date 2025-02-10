@@ -72,17 +72,17 @@ pub enum Token {
     /// Subtraction operator `-`
     Minus,
     /// Multiplication operator `*`
-    Star,
+    Asterisk,
     /// Division operator `/`
     Slash,
     /// Less than operator `<`
-    LessThan,
+    LArrow,
     /// Greater than operator `>`
-    GreaterThan,
+    RArrow,
     /// Less than or equal operator `<=`
-    LessThanEqual,
+    LArrowEqual,
     /// Greater than or equal operator `>=`
-    GreaterThanEqual,
+    RArrowEqual,
     /// Modulus operator `%`
     Percent,
 
@@ -93,32 +93,30 @@ pub enum Token {
     Comma,
     /// Hash symbol `#`
     Hash,
-    /// Exclamation mark `!`
-    Bang,
     /// Equals sign `=`
     Equal,
     /// Equality comparison `==`
-    EqualEqual,
+    Equal2,
     /// Inequality comparison `!=`
-    NotEqual,
+    ExclamationEqual,
     /// Bitwise OR `|`
-    Vbar,
+    Pipe,
     /// Bitwise AND `&`
     Amper,
     /// Left shift `<<`
-    LShift,
+    LArrow2,
     /// Right shift `>>`
-    RShit,
+    RArrow2,
     /// Pipe operator `|>`
-    Pipe,
+    PipeRArrow,
     /// Dot `.`
     Dot,
     /// Left arrow `<-`
-    LArrow,
+    LArrowMinus,
     /// Right arrow `->`
-    RArrow,
+    MinusRArrow,
     /// Range operator `..`
-    DotDot,
+    Dot2,
     /// At symbol `@`
     At,
     /// End of file token
