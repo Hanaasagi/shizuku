@@ -8,7 +8,7 @@ pub struct Parser<I>
 where
     I: Iterator<Item = (u32, Token, u32)>,
 {
-    tokens: I,
+    token_stream: I,
     current_token: Option<(u32, Token, u32)>,
 }
 
@@ -20,14 +20,18 @@ where
     pub fn new(mut tokens: I) -> Self {
         let current_token = tokens.next();
         Self {
-            tokens,
+            token_stream: tokens,
             current_token,
         }
     }
 
     /// Advances the parser to the next token.
     fn advance(&mut self) {
-        self.current_token = self.tokens.next();
+        self.current_token = self.token_stream.next();
+        // TODO: thinks it should be here?
+        while let Some((_, Token::NewLine, _)) = self.current_token {
+            self.current_token = self.token_stream.next();
+        }
     }
 
     /// Peeks at the current token without advancing.
@@ -56,7 +60,21 @@ where
     pub fn parse_program(&mut self) -> Result<Vec<ASTNode>, String> {
         let mut nodes = Vec::new();
 
-        while let Some((_, ref token, _)) = self.current_token {
+        let mut count = 20;
+        while let Some((start, ref token, end)) = self.current_token {
+            #[cfg(test)]
+            {
+                println!("{:?}", token);
+                count -= 1;
+                if count == 0 {
+                    panic!("max loop reached");
+                }
+            }
+
+            if token == &Token::NewLine {
+                self.advance();
+                continue;
+            }
             if token == &Token::EOF {
                 break;
             }
@@ -288,60 +306,69 @@ where
 }
 
 #[test]
-fn test_parse_function_declaration() {
-    // fn add (a: i32, b: i32) -> i32 { return a + b; }
-    let source_tokens = vec![
-        (0, Token::Fn, 2),                             // fn
-        (3, Token::Ident { name: "add".into() }, 6),   // add
-        (6, Token::LParen, 7),                         // (
-        (7, Token::Ident { name: "a".into() }, 8),     // a
-        (8, Token::Colon, 9),                          // :
-        (10, Token::Ident { name: "i32".into() }, 13), // i32
-        (13, Token::Comma, 14),                        // ,
-        (15, Token::Ident { name: "b".into() }, 16),   // b
-        (16, Token::Colon, 17),                        // :
-        (18, Token::Ident { name: "i32".into() }, 21), // i32
-        (21, Token::RParen, 22),                       // )
-        (23, Token::MinusRArrow, 25),                  // ->
-        (26, Token::Ident { name: "i32".into() }, 29), // i32
-        (30, Token::LBrace, 31),                       // {
-        (32, Token::Return, 38),                       // return
-        (39, Token::Ident { name: "a".into() }, 40),   // a
-        (41, Token::Plus, 42),                         // +
-        (43, Token::Ident { name: "b".into() }, 44),   // b
-        (44, Token::Semicolon, 45),                    // ;
-        (46, Token::RBrace, 47),                       // }
-        (48, Token::EOF, 48),                          // EOF
+fn tdd() {
+    use crate::Lexer;
+    let source = r#"
+    fn sum(arg1: i32, arg2: i32) -> i32 {
+        let sum = arg1 + arg2;
+        return sum;
+    }
+    "#;
+    let chars = source.char_indices().map(|(i, c)| (i as u32, c));
+    let mut lexer = Lexer::new(chars);
+
+    // FIXME: iterator
+    let mut tokens = vec![];
+    while let Ok(token) = lexer.next() {
+        if token.1 == Token::EOF {
+            break;
+        }
+        tokens.push(token);
+    }
+
+    println!("Tokens: {:#?}", tokens);
+    let mut parser = Parser::new(tokens.into_iter());
+    let ast = parser.parse_program().unwrap();
+
+    let expected = vec![
+        //
+        ASTNode::Function {
+            name: "sum".into(),
+            params: vec![
+                Parameter {
+                    name: "arg1".into(),
+                    param_type: Type { name: "i32".into() },
+                },
+                Parameter {
+                    name: "arg2".into(),
+                    param_type: Type { name: "i32".into() },
+                },
+            ],
+            return_type: Some(Type { name: "i32".into() }),
+            body: vec![
+                ASTNode::Variable {
+                    name: "sum".into(),
+                    value: Some(Box::new(ASTNode::BinaryOp {
+                        left: Box::new(ASTNode::Variable {
+                            name: "arg1".into(),
+                            value: None,
+                        }),
+                        operator: Token::Plus,
+                        right: Box::new(ASTNode::Variable {
+                            name: "arg2".into(),
+                            value: None,
+                        }),
+                    })),
+                },
+                ASTNode::Return {
+                    value: Some(Box::new(ASTNode::Variable {
+                        name: "sum".into(),
+                        value: None,
+                    })),
+                },
+            ],
+        },
     ];
 
-    let mut parser = Parser::new(source_tokens.into_iter());
-    let ast = parser.parse_program().expect("Failed to parse program");
-
-    assert_eq!(ast, vec![ASTNode::Function {
-        name: "add".into(),
-        params: vec![
-            Parameter {
-                name: "a".into(),
-                param_type: Type { name: "i32".into() },
-            },
-            Parameter {
-                name: "b".into(),
-                param_type: Type { name: "i32".into() },
-            },
-        ],
-        return_type: Some(Type { name: "i32".into() }),
-        body: vec![ASTNode::Return {
-            value: Some(Box::new(ASTNode::BinaryOp {
-                left: Box::new(ASTNode::Variable {
-                    name: "a".into(),
-                    value: None
-                }),
-                operator: Token::Plus,
-                right: Box::new(ASTNode::Variable {
-                    name: "b".into(),
-                    value: None
-                })
-            })),
-        }],
-    }]);
+    assert_eq!(ast, expected);
 }

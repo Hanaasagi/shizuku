@@ -6,9 +6,11 @@ pub mod parser;
 mod span;
 mod token;
 
+pub use ast::ASTNode;
 pub use lexer::Lexer;
 pub use lexer::LexicalError;
 pub use lexer::LexicalErrorType;
+pub use parser::Parser;
 pub use span::SrcSpan;
 pub use token::Base as NumberBase;
 pub use token::Token;

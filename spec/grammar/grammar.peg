@@ -1,0 +1,190 @@
+################        GRAMMAR        ################
+
+root <- skip module_declarations eof
+
+module_declarations <- (doc_comment? KEYWORD_pub? decl)*
+
+decl <- (KEYWORD_inline / KEYWORD_noinline)? KEYWORD_pub? fn_proto block
+      / global_var_decl
+
+fn_proto <- KEYWORD_fn ident? LPAREN param_decl_list RPAREN (MINUS_RARROW type_expr)?
+
+param_decl_list <- (param_decl COMMA)* param_decl?
+
+param_decl <- ident COLON param_type
+
+global_var_decl <- var_decl_proto (EQUAL expression)? SEMICOLON
+
+var_decl_proto <- (KEYWORD_const / KEYWORD_var) ident (COLON type_expr)?
+
+block <- LBRACE statement* RBRACE
+
+statement <- assignment / function_call / return_statement / line_comment
+assignment <- (KEYWORD_const / KEYWORD_let) ident COLON type_expr EQUAL expression SEMICOLON
+function_call <- ident LPAREN (expression (COMMA expression)*)? RPAREN
+
+primary_expression <- function_call
+                    / ident
+                    / float
+                    / integer
+                    / string_literal
+                    / LPAREN expression RPAREN
+
+return_statement <- KEYWORD_return expression SEMICOLON
+
+expression <- additive_expression
+
+additive_expression <- multiplicative_expression ((PLUS / MINUS) multiplicative_expression)*
+
+multiplicative_expression <- primary_expression ((ASTERISK / SLASH / PERCENT) primary_expression)*
+
+expression_list <- expression (COMMA expression)*
+
+param_type <- !keyword [A-Za-z_] [A-Za-z0-9_]* skip
+
+type_expr <- !keyword [A-Za-z_] [A-Za-z0-9_]* skip
+
+ident <- !keyword [A-Za-z_] [A-Za-z0-9_]* skip
+
+char_escape <- "\\x" hex hex
+             / "\\u{" hex+ "}"
+             / "\\" [nr\\t'"]
+
+string_char <- char_escape
+             / [^\\"\n]
+
+################        LITERALS        ###################
+
+sign    <- [+\-]
+
+bin     <- [01]
+bin_    <- '_'? bin
+bin_int <- bin bin_*
+
+oct     <- [0-7]
+oct_    <- '_'? oct
+oct_int <- oct oct_*
+
+hex     <- [0-9a-fA-F]
+hex_    <- '_'? hex
+hex_int <- hex hex_*
+
+dec     <- [0-9]
+dec_    <- '_'? dec
+dec_int <- dec dec_*
+
+float_ <- dec_int '.' dec_int ([eE] [-+]? dec_int)? skip
+        / dec_int [eE] [-+]? dec_int skip
+float <- sign? float_
+
+integer_ <- '0b' bin_int skip
+          / '0o' oct_int skip
+          / '0x' hex_int skip
+          / dec_int      skip
+integer <- sign? integer_
+
+string_literal <- '"' (!'"' .)* '"'
+
+################        SYMBOLS        ##################
+
+LPAREN              <- '('                skip
+RPAREN              <- ')'                skip
+LBRACKET            <- '['                skip
+RBRACKET            <- ']'                skip
+LBRACE              <- '{'                skip
+RBRACE              <- '}'                skip
+SEMICOLON           <- ';'                skip
+
+PLUS                <- '+'      ![=]      skip
+MINUS               <- '-'      ![=>]     skip
+ASTERISK            <- '*'      ![=]      skip
+SLASH               <- '/'      ![=]      skip
+LARROW              <- '<'      ![<=]     skip
+RARROW              <- '>'      ![>=]     skip
+LARROW_EQUAL        <- '<='               skip
+RARROW_EQUAL        <- '>='               skip
+PERCENT             <- '%'      ![=]      skip
+
+COLON               <- ':'                skip
+COMMA               <- ','                skip
+HASH                <- '#'                skip
+EQUAL               <- '='      ![=]      skip
+EQUAL2              <- '=='               skip
+EXCLAMATION_EQUAL   <- '!='               skip
+PIPE                <- '|'      ![>]      skip
+AMPERSAND           <- '&'      ![=]      skip
+LARROW2             <- '<<'               skip
+RARROW2             <- '>>'               skip
+PIPE_RARROW         <- '|>'               skip
+DOT                 <- '.'      ![.]      skip
+LARROW_MINUS        <- '<-'               skip
+MINUS_RARROW        <- '->'               skip
+DOT2                <- '..'               skip
+AT                  <- '@'                skip
+QUESTION            <- '?'                skip
+EXCLAMATION         <- '!'      ![=]      skip
+
+OPERATOR <- PLUS
+          / MINUS
+          / ASTERISK
+          / SLASH
+
+################        KEYWORDS        #################
+
+KEYWORD_and         <- 'and'         end_of_word
+KEYWORD_as          <- 'as'          end_of_word
+KEYWORD_async       <- 'async'       end_of_word
+KEYWORD_await       <- 'await'       end_of_word
+KEYWORD_break       <- 'break'       end_of_word
+KEYWORD_const       <- 'const'       end_of_word
+KEYWORD_continue    <- 'continue'    end_of_word
+KEYWORD_else        <- 'else'        end_of_word
+KEYWORD_enum        <- 'enum'        end_of_word
+KEYWORD_fn          <- 'fn'          end_of_word
+KEYWORD_if          <- 'if'          end_of_word
+KEYWORD_import      <- 'import'      end_of_word
+KEYWORD_inline      <- 'inline'      end_of_word
+KEYWORD_let         <- 'let'         end_of_word
+KEYWORD_noinline    <- 'notinline'   end_of_word
+KEYWORD_opaque      <- 'opaque'      end_of_word
+KEYWORD_or          <- 'or'          end_of_word
+KEYWORD_pub         <- 'pub'         end_of_word
+KEYWORD_return      <- 'return'      end_of_word
+KEYWORD_struct      <- 'struct'      end_of_word
+KEYWORD_test        <- 'test'        end_of_word
+KEYWORD_type        <- 'type'        end_of_word
+KEYWORD_unreachable <- 'unreachable' end_of_word
+KEYWORD_var         <- 'var'         end_of_word
+
+keyword                     <- KEYWORD_and
+         / KEYWORD_as
+         / KEYWORD_async
+         / KEYWORD_await
+         / KEYWORD_break
+         / KEYWORD_const
+         / KEYWORD_continue
+         / KEYWORD_else
+         / KEYWORD_enum
+         / KEYWORD_fn
+         / KEYWORD_if
+         / KEYWORD_import
+         / KEYWORD_inline
+         / KEYWORD_let
+         / KEYWORD_noinline
+         / KEYWORD_opaque
+         / KEYWORD_or
+         / KEYWORD_pub
+         / KEYWORD_return
+         / KEYWORD_struct
+         / KEYWORD_test
+         / KEYWORD_type
+         / KEYWORD_unreachable
+     / KEYWORD_var
+
+doc_comment <- ('///' [^\n]* [ \n]* skip)+
+line_comment <- '//' ![!/][^\n]* / '////' [^\n]*
+end_of_word <- ![a-zA-Z0-9_] skip
+skip <- ([ \n] / line_comment)*
+eof <- !.
+
+# vim: set et ts=4 sw=4:
